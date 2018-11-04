@@ -1,15 +1,18 @@
 from enum import Enum
 from queue import PriorityQueue
 import numpy as np
+import time
+from bresenham import bresenham
 
+diag_cost = np.sqrt(2)
 
-def create_grid(data, drone_altitude, safety_distance):
+def create_grid(data, drone_altitude, safety_distance, debug):
     """
     Returns a grid representation of a 2D configuration space
     based on given obstacle data, drone altitude and safety distance
     arguments.
     """
-
+    start_time = time.time()
     # minimum and maximum north coordinates
     north_min = np.floor(np.min(data[:, 0] - data[:, 3]))
     north_max = np.ceil(np.max(data[:, 0] + data[:, 3]))
@@ -38,6 +41,9 @@ def create_grid(data, drone_altitude, safety_distance):
             ]
             grid[obstacle[0]:obstacle[1]+1, obstacle[2]:obstacle[3]+1] = 1
 
+    stop_time = time.time()
+    if debug:
+        print("Time taken for creating the Grid was: {0:5.2f}".format(stop_time - start_time))
     return grid, int(north_min), int(east_min)
 
 
@@ -55,6 +61,10 @@ class Action(Enum):
     EAST = (0, 1, 1)
     NORTH = (-1, 0, 1)
     SOUTH = (1, 0, 1)
+    NORTH_WEST = (-1, -1, diag_cost)
+    NORTH_EAST = (-1, 1, diag_cost)
+    SOUTH_WEST = (1, -1, diag_cost)
+    SOUTH_EAST = (1, 1, diag_cost)
 
     @property
     def cost(self):
@@ -84,12 +94,20 @@ def valid_actions(grid, current_node):
         valid_actions.remove(Action.WEST)
     if y + 1 > m or grid[x, y + 1] == 1:
         valid_actions.remove(Action.EAST)
-
+    if x - 1 < 0 or y - 1 < 0 or grid[x-1, y-1] == 1:
+        valid_actions.remove(Action.NORTH_WEST)
+    if x - 1 < 0 or y + 1 > m or grid[x-1, y + 1] == 1:
+        valid_actions.remove(Action.NORTH_EAST)
+    if x + 1 > n or y - 1 < 0 or grid[x+1, y-1] == 1:
+        valid_actions.remove(Action.SOUTH_WEST)
+    if x + 1 > n or y + 1 > m or grid[x+1, y+1] == 1:
+        valid_actions.remove(Action.SOUTH_EAST)
     return valid_actions
 
 
-def a_star(grid, h, start, goal):
+def a_star(grid, h, start, goal, debug):
 
+    start_time = time.time()
     path = []
     path_cost = 0
     queue = PriorityQueue()
@@ -136,11 +154,71 @@ def a_star(grid, h, start, goal):
     else:
         print('**********************')
         print('Failed to find a path!')
-        print('**********************') 
+        print('**********************')
+
+    stop_time = time.time()
+    if debug:
+        print("The total number of points in the path is: {}".format(len(path)))
+        print("Time taken for running Astar was: {0:5.2f}".format(stop_time - start_time))
+        print("The total cost of the path is: {0:5.2f}".format(path_cost))
     return path[::-1], path_cost
 
 
 
 def heuristic(position, goal_position):
     return np.linalg.norm(np.array(position) - np.array(goal_position))
+
+def collinearity_check(p1, p2, p3):
+    """Return true if 3 points are collinear """
+    return (p1[0] *(p2[1] - p3[1]) + p2[0]*(p3[1]-p1[1]) + p3[0]*(p1[1]-p2[1]) == 0)
+
+
+def simple_prune(grid, path, debug):
+    """ Uses slope to prune points which are already collinear"""
+    start_time = time.time()
+    total_points = len(path)
+    pruned_path = [path[0]]
+    start_point = path[0]
+
+    for i in range(total_points-2):
+        isCollinear = collinearity_check(start_point, path[i+1], path[i+2])
+        if not isCollinear:
+            # Add that point to the pruned path as well
+            pruned_path.append(path[i+1])
+        # Update the start point
+        start_point = path[i + 1]
+    pruned_path.append(path[total_points -1])
+    stop_time = time.time()
+    if debug:
+        print("Time taken for pruning the path was: {0:5.2f}".format(stop_time - start_time))
+        print("The total number of points in the pruned path is: {}".format(len(pruned_path)))
+
+    return pruned_path
+
+def bresenham_prune(grid, path, debug):
+    """
+    Use the Bresenham module to trim waypoints from path
+    """
+    start_time = time.time()
+    pruned_path = [path[0]]
+    total_points = len(path)
+    start_point = path[0]
+
+    for i in range(total_points - 2):
+        points = bresenham(start_point[0], start_point[1], path[i+2][0], path[i+2][1])
+        if any(grid[point[0], point[1]] == 1 for point in points):
+            pruned_path.append(path[i+1])
+            start_point = path[i+1]
+
+    pruned_path.append(path[-1])
+    stop_time = time.time()
+
+    if debug:
+        print("Time taken for pruning the path was: {0:5.2f}".format(stop_time - start_time))
+        print("The total number of points in the pruned path is: {}".format(len(pruned_path)))
+
+    return pruned_path
+
+
+
 
