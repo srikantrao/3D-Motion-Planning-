@@ -184,9 +184,11 @@ A short performance evaluation is provided below. This table shows the number of
 Example Paths taken for the same simulation in two different cases
 
 `Simple Prune using a collinearity test `
+
 ![Simple Prune](images/simple_prune_2.png)
 
 `Bresenham Prune `
+
 ![Bresenham Prune](images/bresenham_prune_2.png)
 
 As you can see from the two images, the simple prune method has a lot more points in the path compared to the Bresenham prune implementation.
